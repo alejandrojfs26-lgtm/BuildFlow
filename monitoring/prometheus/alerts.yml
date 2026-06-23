@@ -1,0 +1,146 @@
+groups:
+  - name: buildflow-api
+    interval: 30s
+    rules:
+
+      # --- High error rate ---
+      - alert: HighErrorRate
+        expr: |
+          rate(buildflow_http_requests_total{status_code=~"5.."}[5m])
+          /
+          rate(buildflow_http_requests_total[5m])
+          > 0.05
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API error rate above 5% ({{ $value | humanizePercentage }})"
+          description: |
+            The 5xx error rate on buildflow-api is {{ $value | humanizePercentage }}.
+            Sustained high error rate may indicate a deployment issue or upstream failure.
+
+      # --- High latency p99 ---
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(buildflow_http_request_duration_seconds_bucket[5m])) by (le, endpoint)
+          ) > 2.0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "P99 latency above 2s on {{ $labels.endpoint }}"
+          description: |
+            P99 latency on {{ $labels.endpoint }} is {{ $value }}s.
+            Check for slow database queries or resource exhaustion.
+
+      # --- Too many concurrent requests ---
+      - alert: HighConcurrency
+        expr: |
+          max(buildflow_http_requests_in_flight) > 50
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "In-flight requests above 50 ({{ $value }})"
+          description: |
+            There are {{ $value }} concurrent requests in-flight.
+            Consider scaling out if this persists.
+
+      # --- Database down ---
+      - alert: DatabaseDown
+        expr: |
+          probe_success{job="buildflow-postgres"} == 0
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: "PostgreSQL is unreachable"
+          description: "The buildflow-postgres target has been unreachable for 10s."
+
+      # --- Database pool exhaustion ---
+      - alert: DatabasePoolExhaustion
+        expr: |
+          avg by (state) (buildflow_db_pool_size{state="checkedout"})
+          /
+          avg by (state) (buildflow_db_pool_size{state="size"})
+          > 0.8
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database connection pool at {{ $value | humanizePercentage }} usage"
+          description: |
+            The connection pool is {{ $value | humanizePercentage }} utilised.
+            Increase pool_size or reduce connection churn.
+
+      # --- DB query errors spike ---
+      - alert: DatabaseQueryErrors
+        expr: |
+          rate(buildflow_db_query_errors_total[5m]) > 0.1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database query errors rising ({{ $value }}/s)"
+          description: "Database query errors on {{ $labels.operation }}: {{ $value }}/s over 5m."
+
+      # --- Celery queue growing ---
+      - alert: CeleryQueueGrowing
+        expr: |
+          buildflow_celery_queue_depth > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Celery queue {{ $labels.queue }} has {{ $value }} items"
+          description: |
+            Queue depth for {{ $labels.queue }} is {{ $value }}.
+            Workers may be falling behind.
+
+      # --- Celery tasks failing ---
+      - alert: CeleryTaskFailures
+        expr: |
+          rate(buildflow_celery_tasks_total{status="failure"}[10m]) > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Celery task failures on {{ $labels.task }}"
+          description: |
+            Task {{ $labels.task }} is failing. Check worker logs for exceptions.
+
+      # --- Auth failures spike ---
+      - alert: AuthFailuresSpike
+        expr: |
+          rate(buildflow_auth_attempts_total{status="failure"}[5m]) > 5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Auth failure rate above 5/5m ({{ $value }}/s)"
+          description: |
+            Possible brute-force attack or credential issue.
+            Rate: {{ $value }} failures per second.
+
+      # --- Disk space ---
+      - alert: DiskSpaceLow
+        expr: |
+          node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} < 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk space below 10% on {{ $labels.device }}"
+          description: "Only {{ $value | humanizePercentage }} available on {{ $labels.mountpoint }}."
+
+      # --- Missing metrics (dead instance) ---
+      - alert: InstanceDown
+        expr: |
+          up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Instance {{ $labels.instance }} is down"
+          description: "{{ $labels.job }} ({{ $labels.instance }}) has been unreachable for 30s."

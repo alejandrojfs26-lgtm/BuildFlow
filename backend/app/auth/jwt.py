@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
-from jose import JWTError, jwt
+from jose import ExpiredSignatureError, JWTError, jwt
 
 from app.core.config import settings
 
@@ -9,6 +9,18 @@ from app.core.config import settings
 class TokenType:
     ACCESS = "access"
     REFRESH = "refresh"
+
+
+class TokenError(Exception):
+    pass
+
+
+class TokenExpiredError(TokenError):
+    pass
+
+
+class TokenInvalidError(TokenError):
+    pass
 
 
 def _now() -> datetime:
@@ -47,5 +59,7 @@ def decode_token(token: str) -> dict:
             settings.secret_key,
             algorithms=[settings.algorithm],
         )
+    except ExpiredSignatureError:
+        raise TokenExpiredError()
     except JWTError:
-        return {}
+        raise TokenInvalidError()

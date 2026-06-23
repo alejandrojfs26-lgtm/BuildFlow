@@ -8,12 +8,18 @@ from app.services.base import BaseService
 
 
 class ProjectMaterialService(BaseService):
-    def __init__(self, repo: ProjectMaterialRepository):
+    def __init__(
+        self,
+        repo: ProjectMaterialRepository,
+        material_repo: MaterialRepository,
+    ):
         super().__init__(repo)
+        self.material_repo = material_repo
 
-    def create(self, data: ProjectMaterialCreate, tenant_id: UUID, db) -> ...:
-        material_repo = MaterialRepository(db)
-        material = material_repo.get(data.material_id, tenant_id)
+    def create(
+        self, data: ProjectMaterialCreate, tenant_id: UUID
+    ) -> ...:
+        material = self.material_repo.get(data.material_id, tenant_id)
 
         if data.quantity <= 0:
             raise ValidationError("quantity must be positive")
@@ -31,7 +37,7 @@ class ProjectMaterialService(BaseService):
         )
 
         if material.stock is not None:
-            material_repo.update(
+            self.material_repo.update(
                 material.id,
                 {"stock": material.stock - data.quantity},
                 tenant_id=tenant_id,

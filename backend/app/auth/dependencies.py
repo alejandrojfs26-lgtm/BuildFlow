@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import Depends, Header
 from sqlalchemy.orm import Session
 
-from app.auth.jwt import TokenType, decode_token
+from app.auth.jwt import TokenExpiredError, TokenInvalidError, TokenType, decode_token
 from app.core.exceptions import ForbiddenError, UnauthorizedError
 from app.db.session import get_db
 from app.models.user import User
@@ -20,7 +20,13 @@ async def get_current_user(
     token: str = Depends(get_token_from_header),
     db: Session = Depends(get_db),
 ) -> User:
-    payload = decode_token(token)
+    try:
+        payload = decode_token(token)
+    except TokenExpiredError:
+        raise UnauthorizedError("Token expired")
+    except TokenInvalidError:
+        raise UnauthorizedError("Invalid token")
+
     user_id = payload.get("sub")
     token_type = payload.get("type")
 

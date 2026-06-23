@@ -1,6 +1,7 @@
 from enum import StrEnum
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -29,6 +30,13 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
     algorithm: str = "HS256"
+
+    @model_validator(mode="after")
+    def _check_secret_key(self) -> "Settings":
+        default = "change-me-in-production"
+        if self.environment == Environment.PRODUCTION and self.secret_key == default:
+            raise ValueError("SECRET_KEY must be changed from default in production")
+        return self
 
     # Database
     database_url: str = "postgresql://buildflow:buildflow@localhost:5432/buildflow"

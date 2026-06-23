@@ -1,9 +1,9 @@
 from datetime import UTC, datetime
 from uuid import UUID
 
-from sqlalchemy.orm import Session
-
 from app.auth.jwt import (
+    TokenExpiredError,
+    TokenInvalidError,
     TokenType,
     create_access_token,
     create_refresh_token,
@@ -11,7 +11,6 @@ from app.auth.jwt import (
 )
 from app.auth.password import hash_password, verify_password
 from app.core.exceptions import ConflictError, UnauthorizedError
-from app.models.refresh_token import RefreshToken
 from app.repositories.refresh_token import RefreshTokenRepository
 from app.repositories.tenant import TenantRepository
 from app.repositories.user import UserRepository
@@ -20,11 +19,15 @@ from app.schemas.tenant import TenantCreate
 
 
 class AuthService:
-    def __init__(self, db: Session):
-        self.db = db
-        self.user_repo = UserRepository(db)
-        self.tenant_repo = TenantRepository(db)
-        self.refresh_repo = RefreshTokenRepository(db)
+    def __init__(
+        self,
+        user_repo: UserRepository,
+        tenant_repo: TenantRepository,
+        refresh_repo: RefreshTokenRepository,
+    ):
+        self.user_repo = user_repo
+        self.tenant_repo = tenant_repo
+        self.refresh_repo = refresh_repo
 
     def register(self, data: RegisterRequest) -> tuple[str, str, dict]:
         if self.user_repo.get_by_email(data.email):
@@ -87,7 +90,13 @@ class AuthService:
         return access, refresh, user_data
 
     def refresh(self, refresh_token: str) -> tuple[str, str]:
-        payload = decode_token(refresh_token)
+        try:
+            payload = decode_token(refresh_token)
+        except TokenExpiredError:
+            raise UnauthorizedError("Refresh token expired")
+        except TokenInvalidError:
+            raise UnauthorizedError("Invalid refresh token")
+
         user_id = payload.get("sub")
         token_type = payload.get("type")
 
@@ -99,8 +108,7 @@ class AuthService:
         if not stored or stored.is_revoked:
             raise UnauthorizedError("Refresh token revoked or not found")
 
-        stored.is_revoked = True
-        self.db.flush()
+        self.refresh_repo.update(stored.id, {"is_revoked": True})
 
         user = self.user_repo.get_by_id(UUID(user_id))
         if not user or not user.is_active:
@@ -121,8 +129,7 @@ class AuthService:
         token_hash = self._hash_token(refresh_token)
         stored = self.refresh_repo.get_by_hash(token_hash)
         if stored:
-            stored.is_revoked = True
-            self.db.flush()
+            self.refresh_repo.update(stored.id, {"is_revoked": True})
 
     def _store_refresh_token(self, user_id: UUID, token: str) -> None:
         from hashlib import sha256
@@ -131,13 +138,11 @@ class AuthService:
         payload = decode_token(token)
         exp = datetime.fromtimestamp(payload["exp"], tz=UTC)
 
-        entity = RefreshToken(
-            user_id=user_id,
-            token_hash=token_hash,
-            expires_at=exp,
-        )
-        self.db.add(entity)
-        self.db.flush()
+        self.refresh_repo.create({
+            "user_id": user_id,
+            "token_hash": token_hash,
+            "expires_at": exp,
+        })
 
     @staticmethod
     def _hash_token(token: str) -> str:

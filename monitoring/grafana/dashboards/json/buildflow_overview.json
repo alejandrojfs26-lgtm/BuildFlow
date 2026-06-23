@@ -1,0 +1,311 @@
+{
+  "title": "BuildFlow — Overview",
+  "uid": "buildflow_overview",
+  "tags": ["buildflow"],
+  "timezone": "browser",
+  "editable": false,
+  "refresh": "30s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "Request Rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 0},
+      "targets": [
+        {
+          "expr": "sum(rate(buildflow_http_requests_total[5m]))",
+          "legendFormat": "Total"
+        },
+        {
+          "expr": "sum(rate(buildflow_http_requests_total{status_code=~\"5..\"}[5m]))",
+          "legendFormat": "5xx"
+        },
+        {
+          "expr": "sum(rate(buildflow_http_requests_total{status_code=~\"4..\"}[5m]))",
+          "legendFormat": "4xx"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": {"showPoints": "never"}
+        }
+      }
+    },
+    {
+      "id": 2,
+      "title": "P99 Latency by Endpoint",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 0},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(buildflow_http_request_duration_seconds_bucket[5m])) by (le, endpoint))",
+          "legendFormat": "{{ endpoint }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {"showPoints": "never"}
+        }
+      }
+    },
+    {
+      "id": 3,
+      "title": "In-Flight Requests",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 4, "x": 12, "y": 0},
+      "targets": [
+        {
+          "expr": "buildflow_http_requests_in_flight",
+          "legendFormat": "{{ method }}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Error Rate (5xx / Total)",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 2, "x": 16, "y": 0},
+      "targets": [
+        {
+          "expr": "sum(rate(buildflow_http_requests_total{status_code=~\"5..\"}[5m])) / sum(rate(buildflow_http_requests_total[5m]))"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 0.01},
+              {"color": "red", "value": 0.05}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 5,
+      "title": "Auth Rate",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 18, "y": 0},
+      "targets": [
+        {
+          "expr": "rate(buildflow_auth_attempts_total{status=\"success\"}[5m])",
+          "legendFormat": "Success"
+        },
+        {
+          "expr": "rate(buildflow_auth_attempts_total{status=\"failure\"}[5m])",
+          "legendFormat": "Failure"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "reqps"}
+      }
+    },
+    {
+      "id": 6,
+      "title": "DB Connection Pool",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 8},
+      "targets": [
+        {
+          "expr": "buildflow_db_pool_size{state=\"size\"}",
+          "legendFormat": "Pool Size"
+        },
+        {
+          "expr": "buildflow_db_pool_size{state=\"checkedout\"}",
+          "legendFormat": "Active"
+        },
+        {
+          "expr": "buildflow_db_pool_size{state=\"overflow\"}",
+          "legendFormat": "Overflow"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "DB Query Duration (P50, P95, P99)",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 8},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum(rate(buildflow_db_query_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P50"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(buildflow_db_query_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P95"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(buildflow_db_query_duration_seconds_bucket[5m])) by (le))",
+          "legendFormat": "P99"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "s"}
+      }
+    },
+    {
+      "id": 8,
+      "title": "DB Query Errors",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 4, "x": 12, "y": 8},
+      "targets": [
+        {
+          "expr": "rate(buildflow_db_query_errors_total[5m])",
+          "legendFormat": "{{ operation }}"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Celery Queue Depth",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 16, "y": 8},
+      "targets": [
+        {
+          "expr": "buildflow_celery_queue_depth",
+          "legendFormat": "{{ queue }}"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Celery Task Throughput",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 16},
+      "targets": [
+        {
+          "expr": "rate(buildflow_celery_tasks_total{status=\"success\"}[5m])",
+          "legendFormat": "{{ task }} — Success"
+        },
+        {
+          "expr": "rate(buildflow_celery_tasks_total{status=\"failure\"}[5m])",
+          "legendFormat": "{{ task }} — Failure"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {"unit": "reqps"}
+      }
+    },
+    {
+      "id": 11,
+      "title": "Projects by Status",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 3, "x": 6, "y": 16},
+      "targets": [
+        {
+          "expr": "buildflow_projects_total",
+          "legendFormat": "{{ status }}"
+        }
+      ]
+    },
+    {
+      "id": 12,
+      "title": "Workers (Active / Total)",
+      "type": "stat",
+      "gridPos": {"h": 6, "w": 3, "x": 9, "y": 16},
+      "targets": [
+        {
+          "expr": "buildflow_workers_total",
+          "legendFormat": "{{ is_active }}"
+        }
+      ]
+    },
+    {
+      "id": 13,
+      "title": "Reports Today",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 2, "x": 12, "y": 16},
+      "targets": [
+        {
+          "expr": "buildflow_daily_reports_today"
+        }
+      ]
+    },
+    {
+      "id": 14,
+      "title": "Low Stock Materials",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 2, "x": 14, "y": 16},
+      "targets": [
+        {
+          "expr": "buildflow_low_stock_materials_total"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"color": "green", "value": null},
+              {"color": "yellow", "value": 5},
+              {"color": "red", "value": 20}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 15,
+      "title": "Active Tenants",
+      "type": "stat",
+      "gridPos": {"h": 4, "w": 2, "x": 16, "y": 16},
+      "targets": [
+        {
+          "expr": "buildflow_active_tenants"
+        }
+      ]
+    },
+    {
+      "id": 16,
+      "title": "Cache Hit Ratio",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 0, "y": 22},
+      "targets": [
+        {
+          "expr": "rate(buildflow_cache_hits_total[5m]) / (rate(buildflow_cache_hits_total[5m]) + rate(buildflow_cache_misses_total[5m]))",
+          "legendFormat": "{{ cache }}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1
+        }
+      }
+    },
+    {
+      "id": 17,
+      "title": "PostgreSQL — Active Connections",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 6, "y": 22},
+      "targets": [
+        {
+          "expr": "pg_stat_database_numbackends{datname=\"buildflow\"}",
+          "legendFormat": "Active"
+        }
+      ]
+    },
+    {
+      "id": 18,
+      "title": "PostgreSQL — Transactions per Second",
+      "type": "timeseries",
+      "gridPos": {"h": 8, "w": 6, "x": 12, "y": 22},
+      "targets": [
+        {
+          "expr": "rate(pg_stat_database_xact_commit{datname=\"buildflow\"}[1m])",
+          "legendFormat": "Committed"
+        },
+        {
+          "expr": "rate(pg_stat_database_xact_rollback{datname=\"buildflow\"}[1m])",
+          "legendFormat": "Rolled Back"
+        }
+      ]
+    }
+  ]
+}

@@ -13,6 +13,7 @@ from app.models.user import User
 from app.repositories.report import ReportRepository
 from app.schemas.report import ReportCreate, ReportResponse
 from app.services.report import ReportService
+from app.utils.file_handler import resolve_safe_path
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -60,15 +61,13 @@ def download_report(
     tenant_id: UUID = Depends(get_current_tenant_id),
     _: User = Depends(require_permissions(Permission.REPORT_DOWNLOAD)),
 ):
-    from pathlib import Path
-
     service = ReportService(ReportRepository(db))
     report = service.get(report_id, tenant_id=tenant_id)
 
     if not report.file_path:
         raise NotFoundError("Report file", str(report_id))
 
-    path = Path(report.file_path)
+    path = resolve_safe_path(report.file_path)
     return FileResponse(
         path=path,
         filename=f"{report.name}.pdf",

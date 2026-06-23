@@ -1,0 +1,47 @@
+global:
+  scrape_interval:     15s
+  evaluation_interval: 15s
+  scrape_timeout:      10s
+
+rule_files:
+  - "alerts.yml"
+
+scrape_configs:
+  - job_name: "buildflow-api"
+    metrics_path: /metrics
+    scheme: http
+    static_configs:
+      - targets:
+          - "host.docker.internal:8000"
+        labels:
+          service: "buildflow-api"
+          environment: "development"
+
+  - job_name: "buildflow-postgres"
+    static_configs:
+      - targets:
+          - "postgres-exporter:9187"
+        labels:
+          service: "postgres"
+          environment: "development"
+
+  - job_name: "buildflow-redis"
+    static_configs:
+      - targets:
+          - "redis-exporter:9121"
+        labels:
+          service: "redis"
+          environment: "development"
+
+  - job_name: "buildflow-node"
+    static_configs:
+      - targets:
+          - "node-exporter:9100"
+        labels:
+          service: "node"
+          environment: "development"
+
+  - job_name: "prometheus"
+    static_configs:
+      - targets:
+          - "localhost:9090"

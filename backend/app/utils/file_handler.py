@@ -2,6 +2,7 @@ import uuid
 from pathlib import Path
 
 from app.core.config import settings
+from app.core.exceptions import AppError
 
 BASE_DIR = Path(settings.storage_local_path)
 
@@ -21,6 +22,14 @@ def save_file(content: bytes, subdirectory: str, ext: str) -> str:
 
 def get_absolute_path(relative_path: str) -> Path:
     return BASE_DIR / relative_path
+
+
+def resolve_safe_path(file_path: str) -> Path:
+    resolved = (BASE_DIR / file_path).resolve()
+    base = BASE_DIR.resolve()
+    if base not in resolved.parents and resolved != base:
+        raise AppError("Access denied", code="forbidden_path", status_code=403)
+    return resolved
 
 
 def delete_file(relative_path: str) -> None:

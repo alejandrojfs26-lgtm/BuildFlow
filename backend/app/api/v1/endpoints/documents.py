@@ -7,24 +7,12 @@ from sqlalchemy.orm import Session
 from app.auth.dependencies import get_current_tenant_id, get_current_user
 from app.auth.permissions import require_permissions
 from app.core.constants import Permission
-from app.core.exceptions import ValidationError
 from app.db.session import get_db
 from app.models.user import User
 from app.repositories.document import DocumentRepository
 from app.schemas.document import DocumentResponse
-from app.utils.file_handler import get_absolute_path, save_file
-
-
-def _validate_file(file: UploadFile) -> None:
-    allowed = (
-        "application/pdf",
-        "image/jpeg",
-        "image/png",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-    if file.content_type not in allowed:
-        raise ValidationError(f"File type {file.content_type} not allowed")
-
+from app.services.document import DocumentService
+from app.utils.file_handler import get_absolute_path
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -39,13 +27,13 @@ def list_documents(
     tenant_id: UUID = Depends(get_current_tenant_id),
     _: User = Depends(require_permissions(Permission.DOCUMENT_READ)),
 ):
-    repo = DocumentRepository(db)
+    service = DocumentService(DocumentRepository(db))
     filters = {}
     if project_id:
         filters["project_id"] = project_id
     if category:
         filters["category"] = category
-    items, _ = repo.list(
+    items, _ = service.list(
         tenant_id=tenant_id, skip=skip, limit=limit, filters=filters
     )
     return [DocumentResponse.model_validate(d) for d in items]
@@ -61,23 +49,14 @@ def upload_document(
     current_user: User = Depends(get_current_user),
     _: User = Depends(require_permissions(Permission.DOCUMENT_UPLOAD)),
 ):
-    _validate_file(file)
-
-    ext = f".{file.filename.rsplit('.', 1)[-1]}" if file.filename else ".bin"
-    content = file.file.read()
-    file_path = save_file(content, f"{tenant_id}/documents", ext)
-
-    repo = DocumentRepository(db)
-    doc = repo.create(
-        {
-            "project_id": project_id,
-            "name": file.filename or "document",
-            "file_path": file_path,
-            "file_type": file.content_type or "application/octet-stream",
-            "size": len(content),
-            "category": category,
-            "uploaded_by": current_user.id,
-        },
+    service = DocumentService(DocumentRepository(db))
+    doc = service.create(
+        project_id=project_id,
+        name=file.filename or "document",
+        content=file.file.read(),
+        content_type=file.content_type or "application/octet-stream",
+        category=category,
+        uploaded_by=current_user.id,
         tenant_id=tenant_id,
     )
     return DocumentResponse.model_validate(doc)
@@ -90,13 +69,15 @@ def download_document(
     tenant_id: UUID = Depends(get_current_tenant_id),
     _: User = Depends(require_permissions(Permission.DOCUMENT_READ)),
 ):
-    repo = DocumentRepository(db)
-    doc = repo.get(document_id, tenant_id)
-    path = get_absolute_path(doc.file_path)
+    service = DocumentService(DocumentRepository(db))
+    file_path, file_type, filename = service.get_download_info(
+        document_id, tenant_id
+    )
+    path = get_absolute_path(file_path)
     return FileResponse(
         path=path,
-        media_type=doc.file_type,
-        filename=doc.name,
+        media_type=file_type,
+        filename=filename,
     )
 
 
@@ -107,10 +88,6 @@ def delete_document(
     tenant_id: UUID = Depends(get_current_tenant_id),
     _: User = Depends(require_permissions(Permission.DOCUMENT_DELETE)),
 ):
-    repo = DocumentRepository(db)
-    doc = repo.get(document_id, tenant_id)
-    from app.utils.file_handler import delete_file as remove
-
-    remove(doc.file_path)
-    repo.delete(document_id, tenant_id)
+    service = DocumentService(DocumentRepository(db))
+    service.delete(document_id, tenant_id)
     return {"message": "Document deleted"}

@@ -1,52 +1,66 @@
 """
 Structured JSON logging configuration.
 
-Provides a JSON formatter for structured logging, plus a helper to
-bootstrap the root logger.  All application code should use the standard
-`logging` module (e.g. `logger = logging.getLogger(__name__)`) and
-structured data is passed via the `extra` keyword:
+Uses structlog under the hood for structured, contextual logging.
+All application code should use:
 
-    logger.info("User registered", extra={"user_id": user.id, "tenant_id": tenant.id})
+    import structlog
+    logger = structlog.get_logger("buildflow")
+
+Context can be bound via:
+
+    logger = logger.bind(request_id=..., tenant_id=...)
 """
 
-import json
 import logging
 import sys
+from contextvars import ContextVar
 from datetime import UTC, datetime
-from typing import Any
+
+import structlog
 
 from app.core.config import settings
 
+trace_context: ContextVar[dict] = ContextVar("trace_context", default=None)
+_RENDERER = structlog.processors.JSONRenderer()
 
-class JSONFormatter(logging.Formatter):
-    def format(self, record: logging.LogRecord) -> str:
-        log_entry: dict[str, Any] = {
-            "timestamp": datetime.now(UTC).isoformat(),
-            "level": record.levelname,
-            "logger": record.name,
-            "message": record.getMessage(),
-        }
 
-        if record.exc_info and record.exc_info[0]:
-            log_entry["exception"] = self.formatException(record.exc_info)
+def _add_span(_logger, _method_name, event_dict):
+    ctx = trace_context.get()
+    if ctx:
+        event_dict.update(ctx)
+    return event_dict
 
-        extra = getattr(record, "extra_data", None)
-        if extra:
-            log_entry["data"] = extra
 
-        request_id = getattr(record, "request_id", None)
-        if request_id:
-            log_entry["request_id"] = request_id
-
-        return json.dumps(log_entry, default=str)
+def _add_timestamp(_logger, _method_name, event_dict):
+    event_dict["timestamp"] = datetime.now(UTC).isoformat()
+    return event_dict
 
 
 def setup_logging() -> None:
-    handler = logging.StreamHandler(sys.stdout)
-    handler.setFormatter(JSONFormatter())
+    structlog.configure(
+        processors=[
+            _add_timestamp,
+            _add_span,
+            structlog.stdlib.filter_by_level,
+            structlog.stdlib.add_logger_name,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.PositionalArgumentsFormatter(),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.UnicodeDecoder(),
+            _RENDERER,
+        ],
+        wrapper_class=structlog.stdlib.BoundLogger,
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
 
     root = logging.getLogger()
     root.handlers.clear()
+
+    handler = logging.StreamHandler(sys.stdout)
     root.addHandler(handler)
 
     level = logging.DEBUG if settings.debug else logging.INFO
@@ -59,12 +73,5 @@ def setup_logging() -> None:
         logging.INFO if settings.debug else logging.WARNING
     )
 
-    root.info(
-        "Logging initialised",
-        extra={
-            "extra_data": {
-                "app": settings.app_name,
-                "version": settings.app_version,
-            }
-        },
-    )
+    logger = structlog.get_logger("buildflow")
+    logger.info("Logging initialised", app=settings.app_name, version=settings.app_version)

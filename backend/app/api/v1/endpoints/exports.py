@@ -10,6 +10,7 @@ from app.models.user import User
 from app.repositories.export import ExportRepository
 from app.schemas.export import ExportCreate, ExportResponse
 from app.services.export_service import ExportService
+from app.utils.file_handler import resolve_safe_path
 
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
@@ -60,9 +61,8 @@ def download_export(
 ):
     service = ExportService(ExportRepository(db))
     export = service.get(export_id, tenant_id=tenant_id)
-    from pathlib import Path
 
-    path = Path(export.file_path)
+    path = resolve_safe_path(export.file_path)
     media = (
         "text/csv"
         if export.format == "csv"

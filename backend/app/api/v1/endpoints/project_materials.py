@@ -8,6 +8,7 @@ from app.auth.permissions import require_permissions
 from app.core.constants import Permission
 from app.db.session import get_db
 from app.models.user import User
+from app.repositories.material import MaterialRepository
 from app.repositories.project_material import ProjectMaterialRepository
 from app.schemas.common import Message
 from app.schemas.project_material import (
@@ -20,6 +21,13 @@ from app.services.project_material import ProjectMaterialService
 router = APIRouter(dependencies=[Depends(get_current_user)])
 
 
+def _build_service(db: Session) -> ProjectMaterialService:
+    return ProjectMaterialService(
+        ProjectMaterialRepository(db),
+        MaterialRepository(db),
+    )
+
+
 @router.get("/", response_model=list[ProjectMaterialResponse])
 def list_project_materials(
     project_id: UUID | None = None,
@@ -30,7 +38,7 @@ def list_project_materials(
     tenant_id: UUID = Depends(get_current_tenant_id),
     _: User = Depends(require_permissions(Permission.MATERIAL_READ)),
 ):
-    service = ProjectMaterialService(ProjectMaterialRepository(db))
+    service = _build_service(db)
     filters = {}
     if project_id:
         filters["project_id"] = project_id
@@ -49,8 +57,8 @@ def create_project_material(
     tenant_id: UUID = Depends(get_current_tenant_id),
     _: User = Depends(require_permissions(Permission.MATERIAL_UPDATE)),
 ):
-    service = ProjectMaterialService(ProjectMaterialRepository(db))
-    return service.create(data, tenant_id=tenant_id, db=db)
+    service = _build_service(db)
+    return service.create(data, tenant_id=tenant_id)
 
 
 @router.get("/{entry_id}", response_model=ProjectMaterialResponse)
@@ -60,7 +68,7 @@ def get_project_material(
     tenant_id: UUID = Depends(get_current_tenant_id),
     _: User = Depends(require_permissions(Permission.MATERIAL_READ)),
 ):
-    service = ProjectMaterialService(ProjectMaterialRepository(db))
+    service = _build_service(db)
     return service.get(entry_id, tenant_id=tenant_id)
 
 
@@ -72,7 +80,7 @@ def update_project_material(
     tenant_id: UUID = Depends(get_current_tenant_id),
     _: User = Depends(require_permissions(Permission.MATERIAL_UPDATE)),
 ):
-    service = ProjectMaterialService(ProjectMaterialRepository(db))
+    service = _build_service(db)
     return service.update(entry_id, data, tenant_id=tenant_id)
 
 
@@ -83,6 +91,6 @@ def delete_project_material(
     tenant_id: UUID = Depends(get_current_tenant_id),
     _: User = Depends(require_permissions(Permission.MATERIAL_DELETE)),
 ):
-    service = ProjectMaterialService(ProjectMaterialRepository(db))
+    service = _build_service(db)
     service.delete(entry_id, tenant_id=tenant_id)
     return Message(message="Entry deleted")
