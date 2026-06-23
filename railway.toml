@@ -1,0 +1,7 @@
+[build]
+  builder = "DOCKERFILE"
+  dockerfile_path = "backend/Dockerfile"
+
+[deploy]
+  healthcheck_path = "/health"
+  restart_policy_type = "always"
