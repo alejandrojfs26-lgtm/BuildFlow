@@ -1,0 +1,11 @@
+[build]
+  builder = "DOCKERFILE"
+  dockerfile_path = "Dockerfile"
+
+[deploy]
+  healthcheck_path = "/health"
+  restart_policy_type = "always"
+
+# Variables por defecto (se pueden sobrescribir en el dashboard)
+[service]
+  PORT = 8000
